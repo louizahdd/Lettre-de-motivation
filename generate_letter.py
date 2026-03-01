@@ -1,3 +1,14 @@
+"""
+Générateur de lettre de motivation — ISFEC d'Arradon
+----------------------------------------------------
+Pour ajouter le logo ISFEC :
+  1. Téléchargez le logo depuis https://www.isfec-bretagne.org/
+     (clic droit sur le logo → Enregistrer l'image)
+  2. Placez-le ici :  /home/user/Lettre-de-motivation/isfec_logo.png
+  3. Relancez le script
+"""
+
+import os
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -5,245 +16,312 @@ from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
-FONT = "Calibri"
-
-doc = Document()
-
-# ── Marges ──────────────────────────────────────────────────────────────────
-section = doc.sections[0]
-section.top_margin    = Cm(2.0)
-section.bottom_margin = Cm(2.0)
-section.left_margin   = Cm(2.5)
-section.right_margin  = Cm(2.5)
-
-# Supprimer l'espacement par défaut du style Normal
-style = doc.styles["Normal"]
-style.font.name = FONT
-style.font.size = Pt(11)
-style.paragraph_format.space_before = Pt(0)
-style.paragraph_format.space_after  = Pt(0)
-style.paragraph_format.line_spacing = Pt(14)
+FONT      = "Calibri"
+BLUE      = RGBColor(0x1B, 0x54, 0x8C)   # bleu ISFEC (sobre)
+LOGO_PATH = "/home/user/Lettre-de-motivation/isfec_logo.png"
+OUTPUT    = "/home/user/Lettre-de-motivation/Lettre_motivation_ISFEC_Arradon_M2E.docx"
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
-def font(run, size=11, bold=False, italic=False, color=None):
-    run.font.name = FONT
-    run.font.size = Pt(size)
-    run.font.bold = bold
+# ─────────────────────────────────────────────────────────────────────
+#  Helpers
+# ─────────────────────────────────────────────────────────────────────
+
+def set_run(run, size=11, bold=False, italic=False, color=None):
+    run.font.name   = FONT
+    run.font.size   = Pt(size)
+    run.font.bold   = bold
     run.font.italic = italic
     if color:
-        run.font.color.rgb = RGBColor(*color)
+        run.font.color.rgb = color
 
 
-def para(doc, text="", align=WD_ALIGN_PARAGRAPH.LEFT,
-         bold=False, size=11, sb=0, sa=6, indent=False):
-    p = doc.add_paragraph()
+def new_para(container, text="", align=WD_ALIGN_PARAGRAPH.LEFT,
+             bold=False, italic=False, size=11, sb=0, sa=6,
+             color=None, first_indent=None):
+    p = container.add_paragraph()
     p.alignment = align
     p.paragraph_format.space_before = Pt(sb)
     p.paragraph_format.space_after  = Pt(sa)
-    if indent:
-        p.paragraph_format.first_line_indent = Cm(1)
+    if first_indent is not None:
+        p.paragraph_format.first_line_indent = Cm(first_indent)
     if text:
         r = p.add_run(text)
-        font(r, size=size, bold=bold)
+        set_run(r, size=size, bold=bold, italic=italic, color=color)
     return p
 
 
-def remove_borders(obj_xml, sides=("top","left","bottom","right","insideH","insideV"), tag="w:tcBorders"):
-    borders_el = OxmlElement(tag)
-    for side in sides:
+def _clear_borders(element, tag):
+    bd = OxmlElement(tag)
+    for side in ("top", "left", "bottom", "right", "insideH", "insideV"):
         b = OxmlElement(f"w:{side}")
         b.set(qn("w:val"),   "none")
         b.set(qn("w:sz"),    "0")
         b.set(qn("w:space"), "0")
         b.set(qn("w:color"), "auto")
-        borders_el.append(b)
-    existing = obj_xml.find(qn(tag))
-    if existing is not None:
-        obj_xml.remove(existing)
-    obj_xml.append(borders_el)
+        bd.append(b)
+    ex = element.find(qn(tag))
+    if ex is not None:
+        element.remove(ex)
+    element.append(bd)
 
 
-def set_cell_width(cell, width_cm):
-    tc   = cell._tc
-    tcPr = tc.get_or_add_tcPr()
-    tcW  = OxmlElement("w:tcW")
-    tcW.set(qn("w:w"),    str(int(width_cm * 567)))  # twips : 1 cm ≈ 567
-    tcW.set(qn("w:type"), "dxa")
-    existing = tcPr.find(qn("w:tcW"))
-    if existing is not None:
-        tcPr.remove(existing)
-    tcPr.append(tcW)
+def borderless_table(doc, rows, cols):
+    """Crée une table sans bordures, style Normal Table."""
+    tbl = doc.add_table(rows=rows, cols=cols)
+    tbl.style = "Normal Table"
+    # Supprimer les bordures au niveau du tableau
+    tblPr = tbl._tbl.find(qn("w:tblPr"))
+    if tblPr is None:
+        tblPr = OxmlElement("w:tblPr")
+        tbl._tbl.insert(0, tblPr)
+    _clear_borders(tblPr, "w:tblBorders")
+    # Supprimer les bordures au niveau de chaque cellule
+    for row in tbl.rows:
+        for cell in row.cells:
+            tcPr = cell._tc.get_or_add_tcPr()
+            _clear_borders(tcPr, "w:tcBorders")
+            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
+            # Vider les paragraphes vides par défaut
+            for p in list(cell.paragraphs):
+                p._element.getparent().remove(p._element)
+    return tbl
 
 
-def add_cell_para(cell, text, bold=False, size=11,
-                  align=WD_ALIGN_PARAGRAPH.LEFT, sa=3):
+def set_col_width(cell, cm):
+    tcPr = cell._tc.get_or_add_tcPr()
+    w = OxmlElement("w:tcW")
+    w.set(qn("w:w"),    str(int(cm * 567)))   # 1 cm ≈ 567 twips
+    w.set(qn("w:type"), "dxa")
+    ex = tcPr.find(qn("w:tcW"))
+    if ex is not None:
+        tcPr.remove(ex)
+    tcPr.append(w)
+
+
+def cell_para(cell, text="", bold=False, italic=False, size=11,
+              align=WD_ALIGN_PARAGRAPH.LEFT, sb=0, sa=2, color=None):
     p = cell.add_paragraph()
     p.alignment = align
-    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.space_before = Pt(sb)
     p.paragraph_format.space_after  = Pt(sa)
-    r = p.add_run(text)
-    font(r, size=size, bold=bold)
+    if text:
+        r = p.add_run(text)
+        set_run(r, size=size, bold=bold, italic=italic, color=color)
     return p
 
 
-# ════════════════════════════════════════════════════════════════════════════
-#  EN-TÊTE
-# ════════════════════════════════════════════════════════════════════════════
-table = doc.add_table(rows=1, cols=2)
-table.style = "Normal Table"   # pas de bordures par défaut
+def horiz_rule(doc, color_hex="1B548C", thickness="6", sb=14, sa=14):
+    """Ligne de séparation horizontale colorée."""
+    p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(sb)
+    p.paragraph_format.space_after  = Pt(sa)
+    pPr  = p._p.get_or_add_pPr()
+    pBdr = OxmlElement("w:pBdr")
+    bot  = OxmlElement("w:bottom")
+    bot.set(qn("w:val"),   "single")
+    bot.set(qn("w:sz"),    thickness)
+    bot.set(qn("w:space"), "1")
+    bot.set(qn("w:color"), color_hex)
+    pBdr.append(bot)
+    ex = pPr.find(qn("w:pBdr"))
+    if ex is not None:
+        pPr.remove(ex)
+    pPr.append(pBdr)
 
-# Supprimer aussi les bordures au niveau du tableau
-tbl    = table._tbl
-tblPr  = tbl.find(qn("w:tblPr"))
-if tblPr is None:
-    tblPr = OxmlElement("w:tblPr")
-    tbl.insert(0, tblPr)
-remove_borders(tblPr, tag="w:tblBorders")
 
-left_cell  = table.cell(0, 0)
-right_cell = table.cell(0, 1)
+# ─────────────────────────────────────────────────────────────────────
+#  Document
+# ─────────────────────────────────────────────────────────────────────
+doc = Document()
 
-# Largeurs : ~8 cm (émetteur) | ~8 cm (destinataire)
-set_cell_width(left_cell,  8.0)
-set_cell_width(right_cell, 8.0)
+section = doc.sections[0]
+section.top_margin    = Cm(1.8)
+section.bottom_margin = Cm(1.8)
+section.left_margin   = Cm(2.5)
+section.right_margin  = Cm(2.5)
 
-# Supprimer les bordures sur chaque cellule
-for cell in [left_cell, right_cell]:
-    tc   = cell._tc
-    tcPr = tc.get_or_add_tcPr()
-    remove_borders(tcPr, tag="w:tcBorders")
-    cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
+normal = doc.styles["Normal"]
+normal.font.name = FONT
+normal.font.size = Pt(11)
+normal.paragraph_format.space_before = Pt(0)
+normal.paragraph_format.space_after  = Pt(0)
 
-# Vider les paragraphes vides créés par défaut
-for cell in [left_cell, right_cell]:
-    for p in list(cell.paragraphs):
-        p._element.getparent().remove(p._element)
 
-# Colonne gauche – expéditrice
-for text, bold, size, sa in [
-    ("Louiza HADID",          True,  12, 4),
-    ("3 rue de Ventspils",    False, 11, 2),
-    ("56100 Lorient",         False, 11, 2),
-    ("(+33) 6 50 37 56 47",  False, 11, 2),
-    ("louizahdd@gmail.com",   False, 11, 2),
-]:
-    add_cell_para(left_cell, text, bold=bold, size=size, sa=sa)
+# ═════════════════════════════════════════════════════════════════════
+#  1. EN-TÊTE  — Expéditrice (gauche) | Logo (droite)
+# ═════════════════════════════════════════════════════════════════════
+# Page utile = 16 cm  →  sender 10 cm | logo 6 cm
+t_header = borderless_table(doc, 1, 2)
+c_name   = t_header.cell(0, 0)
+c_logo   = t_header.cell(0, 1)
+set_col_width(c_name, 10.0)
+set_col_width(c_logo,  6.0)
 
-# Colonne droite – destinataire (aligné à gauche dans sa cellule)
-for text, bold, size, sa in [
-    ("ISFEC Bretagne",                  True,  11, 3),
-    ("Site d'Arradon",                  False, 11, 2),
-    ("3 allée des Fougères, BP 25",     False, 11, 2),
-    ("56610 Arradon",                   False, 11, 2),
-]:
-    add_cell_para(right_cell, text, bold=bold, size=size, sa=sa)
+# — Expéditrice
+cell_para(c_name, "Louiza HADID",         bold=True, size=15, sa=5, color=BLUE)
+cell_para(c_name, "3 rue de Ventspils",   size=10, sa=1)
+cell_para(c_name, "56100 Lorient",        size=10, sa=1)
+cell_para(c_name, "(+33) 6 50 37 56 47", size=10, sa=1)
+cell_para(c_name, "louizahdd@gmail.com",  size=10, sa=0)
 
-# ── Espace + Date ─────────────────────────────────────────────────────────
-para(doc, sb=10, sa=0)
-para(doc, "Lorient, le 1er mars 2026",
-     align=WD_ALIGN_PARAGRAPH.RIGHT, sb=2, sa=14)
+# — Logo ISFEC
+if os.path.exists(LOGO_PATH):
+    p = c_logo.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.space_after  = Pt(0)
+    p.add_run().add_picture(LOGO_PATH, width=Cm(4.5))
+else:
+    p = c_logo.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p.paragraph_format.space_before = Pt(0)
+    r = p.add_run("[ Logo ISFEC Bretagne ]")
+    set_run(r, size=9, italic=True, color=RGBColor(0xBB, 0xBB, 0xBB))
 
-# ── Objet ─────────────────────────────────────────────────────────────────
+
+# ═════════════════════════════════════════════════════════════════════
+#  2. LIGNE DE SÉPARATION
+# ═════════════════════════════════════════════════════════════════════
+horiz_rule(doc, color_hex="1B548C", thickness="6", sb=16, sa=16)
+
+
+# ═════════════════════════════════════════════════════════════════════
+#  3. DESTINATAIRE (gauche)  |  DATE (droite)
+# ═════════════════════════════════════════════════════════════════════
+t_addr = borderless_table(doc, 1, 2)
+c_dest = t_addr.cell(0, 0)
+c_date = t_addr.cell(0, 1)
+set_col_width(c_dest, 9.5)
+set_col_width(c_date, 6.5)
+
+cell_para(c_dest, "ISFEC Bretagne",                 bold=True, size=11, sa=2)
+cell_para(c_dest, "Site d'Arradon",                 size=11, sa=2)
+cell_para(c_dest, "3 allée des Fougères, BP 25",    size=11, sa=2)
+cell_para(c_dest, "56610 Arradon",                  size=11, sa=0)
+
+cell_para(c_date, "Lorient, le 1er mars 2026",
+          align=WD_ALIGN_PARAGRAPH.RIGHT, size=11, sa=0)
+
+
+# ═════════════════════════════════════════════════════════════════════
+#  4. OBJET
+# ═════════════════════════════════════════════════════════════════════
+new_para(doc, sb=20, sa=0)   # espace avant objet
+
 p = doc.add_paragraph()
 p.paragraph_format.space_before = Pt(0)
-p.paragraph_format.space_after  = Pt(14)
+p.paragraph_format.space_after  = Pt(18)
 r1 = p.add_run("Objet : ")
-font(r1, bold=True)
+set_run(r1, bold=True)
 r2 = p.add_run("Candidature au Master MEEF – Mention 1er degré")
-font(r2, bold=True)
+set_run(r2, bold=True)
 
-# ── Salutation ────────────────────────────────────────────────────────────
-para(doc, "Madame, Monsieur,", sb=0, sa=12)
 
-# ════════════════════════════════════════════════════════════════════════════
-#  CORPS
-# ════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════
+#  5. SALUTATION
+# ═════════════════════════════════════════════════════════════════════
+new_para(doc, "Madame, Monsieur,", sb=0, sa=14)
 
-corps = [
 
-    # § 1 ─ Présentation et choix de l'ISFEC d'Arradon
+# ═════════════════════════════════════════════════════════════════════
+#  6. CORPS
+# ═════════════════════════════════════════════════════════════════════
+paragraphes = [
+
+    # § 1 — Choix de l'ISFEC d'Arradon (enrichi, détaillé)
     (
         "C'est avec un vif intérêt que je vous adresse ma candidature pour le Master MEEF, "
         "mention 1er degré, proposé par l'ISFEC Bretagne sur son site d'Arradon. Affilié à "
         "l'Université Catholique de l'Ouest pour la délivrance du diplôme, cet établissement "
         "s'inscrit pleinement dans le réseau national des ISFEC et se distingue par un "
-        "accompagnement de proximité au sein de promotions à effectifs réduits. C'est ce cadre "
-        "de formation, à la fois rigoureux et bienveillant, ancré dans les valeurs de "
+        "accompagnement de proximité au sein de promotions à effectifs réduits. C'est ce "
+        "cadre de formation, à la fois rigoureux et bienveillant, ancré dans les valeurs de "
         "l'enseignement catholique, qui en fait mon premier choix dans la perspective de "
         "préparer le CRPE et d'enseigner dans le premier degré."
     ),
 
-    # § 2 ─ Parcours académique
+    # § 2 — Parcours académique
     (
         "Mon parcours en Sciences de l'éducation à l'Université Rennes 2 m'a permis de "
         "construire des bases solides en pédagogie, en psychologie du développement et en "
-        "didactique. Ces apprentissages ont progressivement conforté ma conviction : c'est dans "
-        "l'enseignement du premier degré que je veux m'investir sur le long terme. La "
+        "didactique. Ces apprentissages ont progressivement conforté ma conviction : c'est "
+        "dans l'enseignement du premier degré que je veux m'investir sur le long terme. La "
         "préparation au CRPE intégrée à votre Master constitue pour moi une étape décisive "
         "pour accéder à ce métier dans les meilleures conditions."
     ),
 
-    # § 3 ─ Expériences professionnelles (sans tiret cadratin)
+    # § 3 — Expériences (sans tiret cadratin)
     (
         "Sur le plan pratique, mes expériences au contact des enfants ont renforcé cette "
         "orientation. En tant qu'animatrice périscolaire dans le quartier prioritaire de "
-        "Villejean à Rennes, j'ai appris à adapter mon approche à des publics diversifiés et à "
-        "faire preuve de patience et de bienveillance dans des situations parfois complexes. "
-        "J'ai également exercé comme tutrice de français auprès d'apprenants étrangers, ce qui "
-        "m'a amenée à travailler la reformulation, la différenciation pédagogique et l'écoute "
-        "active, des compétences directement transposables dans l'exercice du métier "
-        "d'enseignante."
+        "Villejean à Rennes, j'ai appris à adapter mon approche à des publics diversifiés "
+        "et à faire preuve de patience et de bienveillance dans des situations parfois "
+        "complexes. J'ai également exercé comme tutrice de français auprès d'apprenants "
+        "étrangers, ce qui m'a amenée à travailler la reformulation, la différenciation "
+        "pédagogique et l'écoute active, des compétences directement transposables dans "
+        "l'exercice du métier d'enseignante."
     ),
 
-    # § 4 ─ Conclusion et motivation
+    # § 4 — Motivation et projection
     (
-        "Ces expériences m'ont confirmé que l'enseignement va bien au-delà de la transmission "
-        "de savoirs : il s'agit avant tout d'accompagner chaque élève dans son développement, "
-        "de l'encourager et d'adapter sa pratique à ses besoins. C'est dans cette perspective "
-        "que je souhaite m'investir pleinement dans votre formation, convaincue que l'ISFEC "
-        "d'Arradon m'offrira les outils théoriques et pratiques pour exercer ce métier avec "
-        "rigueur et engagement."
+        "Ces expériences m'ont confirmé que l'enseignement va bien au-delà de la "
+        "transmission de savoirs : il s'agit avant tout d'accompagner chaque élève dans "
+        "son développement, de l'encourager et d'adapter sa pratique à ses besoins. C'est "
+        "dans cette perspective que je souhaite m'investir pleinement dans votre formation, "
+        "convaincue que l'ISFEC d'Arradon m'offrira les outils théoriques et pratiques "
+        "pour exercer ce métier avec rigueur et engagement."
     ),
 ]
 
-for texte in corps:
+for texte in paragraphes:
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p.paragraph_format.space_before = Pt(0)
-    p.paragraph_format.space_after  = Pt(10)
+    p.paragraph_format.space_after  = Pt(12)
     p.paragraph_format.first_line_indent = Cm(1)
     r = p.add_run(texte)
-    font(r)
+    set_run(r)
 
-# ── Formule de politesse ──────────────────────────────────────────────────
+
+# ═════════════════════════════════════════════════════════════════════
+#  7. FORMULE DE POLITESSE
+# ═════════════════════════════════════════════════════════════════════
 for texte, sa in [
     (
         "Dans l'attente d'une réponse favorable, je me tiens à votre disposition "
         "pour tout entretien ou renseignement complémentaire.",
-        10,
+        12,
     ),
     (
         "Veuillez recevoir, Madame, Monsieur, l'expression de mes salutations distinguées.",
-        30,
+        34,
     ),
 ]:
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p.paragraph_format.space_before = Pt(0)
     p.paragraph_format.space_after  = Pt(sa)
-    r = p.add_run(texte)
-    font(r)
+    set_run(p.add_run(texte))
 
-# ── Signature ─────────────────────────────────────────────────────────────
+
+# ═════════════════════════════════════════════════════════════════════
+#  8. SIGNATURE
+# ═════════════════════════════════════════════════════════════════════
 p = doc.add_paragraph()
 p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 p.paragraph_format.space_before = Pt(0)
 p.paragraph_format.space_after  = Pt(0)
-r = p.add_run("Louiza Hadid")
-font(r, bold=True)
+set_run(p.add_run("Louiza Hadid"), bold=True)
 
-# ── Sauvegarde ────────────────────────────────────────────────────────────
-output = "/home/user/Lettre-de-motivation/Lettre_motivation_ISFEC_Arradon_M2E.docx"
-doc.save(output)
-print(f"Fichier généré : {output}")
+
+# ─────────────────────────────────────────────────────────────────────
+doc.save(OUTPUT)
+print(f"Fichier généré : {OUTPUT}")
+
+if not os.path.exists(LOGO_PATH):
+    print()
+    print("Logo ISFEC manquant. Pour l'ajouter :")
+    print("  1. Allez sur https://www.isfec-bretagne.org/")
+    print("  2. Clic droit sur le logo → 'Enregistrer l'image sous'")
+    print(f"  3. Sauvegardez-le ici : {LOGO_PATH}")
+    print("  4. Relancez :  python3 generate_letter.py")
