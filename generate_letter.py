@@ -187,11 +187,10 @@ set_run(p.add_run("Madame, Monsieur,"))
 #  5. CORPS
 # ═══════════════════════════════════════════════════════════════════════════
 body_para(doc,
-    "En fin de licence de Sciences de l'éducation à Rennes 2, je candidate au Master MEEF "
-    "mention 1er degré pour préparer le CRPE et devenir enseignante du premier degré. "
-    "J'ai choisi l'ISFEC d'Arradon pour ses promotions à taille humaine — un cadre qui me "
-    "semble plus adapté à cette année de préparation — et parce que les valeurs portées "
-    "par l'enseignement catholique sont proches des miennes.")
+    "Diplômée d'une licence de Sciences de l'éducation à Rennes 2, je candidate au Master "
+    "MEEF mention 1er degré pour préparer le CRPE et devenir enseignante du premier degré. "
+    "J'ai choisi l'ISFEC d'Arradon pour ses promotions à taille humaine, un cadre qui me "
+    "semble plus propice à cette préparation, et pour des valeurs qui sont aussi les miennes.")
 
 body_para(doc,
     "Ces trois années à Rennes 2 m'ont permis de construire des bases solides en "
@@ -206,7 +205,7 @@ body_para(doc,
     "Villejean à Rennes, j'ai appris à adapter mon approche à des publics diversifiés "
     "et à faire preuve de patience et de bienveillance. J'ai également exercé comme "
     "tutrice de français auprès d'apprenants étrangers, développant ainsi la "
-    "reformulation, la différenciation pédagogique et l'écoute active — des compétences "
+    "reformulation, la différenciation pédagogique et l'écoute active, des compétences "
     "directement transposables dans l'exercice du métier d'enseignante.")
 
 body_para(doc,
