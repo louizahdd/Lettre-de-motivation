@@ -187,21 +187,18 @@ set_run(p.add_run("Madame, Monsieur,"))
 #  5. CORPS
 # ═══════════════════════════════════════════════════════════════════════════
 body_para(doc,
-    "C'est avec un vif intérêt que je vous adresse ma candidature pour le Master MEEF, "
-    "mention 1er degré, proposé par l'ISFEC Bretagne sur son site d'Arradon. Affilié à "
-    "l'Université Catholique de l'Ouest, cet établissement se distingue par un "
-    "accompagnement de proximité au sein de promotions à effectifs réduits. C'est ce "
-    "cadre de formation, à la fois rigoureux et bienveillant, ancré dans les valeurs de "
-    "l'enseignement catholique, qui en fait mon premier choix dans la perspective de "
-    "préparer le CRPE et d'enseigner dans le premier degré.")
+    "En fin de licence de Sciences de l'éducation à Rennes 2, je candidate au Master MEEF "
+    "mention 1er degré pour préparer le CRPE et devenir enseignante du premier degré. "
+    "J'ai choisi l'ISFEC d'Arradon pour ses promotions à taille humaine — un cadre qui me "
+    "semble plus adapté à cette année de préparation — et parce que les valeurs portées "
+    "par l'enseignement catholique sont proches des miennes.")
 
 body_para(doc,
-    "Mon parcours en Sciences de l'éducation à l'Université Rennes 2 m'a permis de "
-    "construire des bases solides en pédagogie, en psychologie du développement et en "
-    "didactique. Ces apprentissages ont progressivement conforté ma conviction : c'est "
-    "dans l'enseignement du premier degré que je veux m'investir sur le long terme. La "
-    "préparation au CRPE intégrée à votre Master constitue pour moi une étape décisive "
-    "pour accéder à ce métier dans les meilleures conditions.")
+    "Ces trois années à Rennes 2 m'ont permis de construire des bases solides en "
+    "pédagogie, en psychologie du développement et en didactique. Elles ont "
+    "progressivement conforté ma conviction : c'est dans l'enseignement du premier degré "
+    "que je veux m'investir. La préparation au CRPE intégrée à votre Master constitue "
+    "une étape décisive pour y accéder dans les meilleures conditions.")
 
 body_para(doc,
     "Sur le plan pratique, mes expériences au contact des enfants ont renforcé cette "
